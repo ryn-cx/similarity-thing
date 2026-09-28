@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Similarity Thing — compare two texts with 30+ algorithms</title>
+<meta name="description" content="Compare two pieces of text with Levenshtein, Damerau-Levenshtein, Jaro-Winkler, Ratcliff/Obershelp, Needleman-Wunsch, Smith-Waterman, cosine, Jaccard, Sørensen-Dice, q-grams, TF-IDF, Soundex, Phonex, Cologne Phonetic, Metaphone, Double Metaphone, NYSIIS, go-potion and static-similarity-mrl-multilingual-v1 semantic embeddings — with timings.">
+<meta property="og:title" content="Similarity Thing">
+<meta property="og:description" content="How similar are two strings? Ask thirty algorithms at once.">
+<meta property="og:url" content="https://similaritything.com/">
+<meta name="theme-color" content="#0b0b14">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0b0b14;
+  --panel: rgba(255,255,255,.045);
+  --panel-strong: rgba(255,255,255,.07);
+  --line: rgba(255,255,255,.09);
+  --line-strong: rgba(255,255,255,.16);
+  --text: #ecebf5;
+  --muted: #9b99b3;
+  --faint: #6c6a85;
+  --a: #7c8cff;
+  --b: #ff7ac6;
+  --ok: #5eead4;
+  --bad: #fb7185;
+  --radius: 18px;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: "Inter", system-ui, -apple-system, Segoe UI, sans-serif;
+  --serif: "Instrument Serif", Georgia, serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 var(--sans);
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ambient background */
+.orbs { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.orb { position: absolute; width: 60vmax; height: 60vmax; border-radius: 50%; filter: blur(90px); opacity: .28; }
+.orb.a { background: var(--a); top: -30vmax; left: -20vmax; animation: drift 26s ease-in-out infinite alternate; }
+.orb.b { background: var(--b); top: -25vmax; right: -25vmax; animation: drift 32s ease-in-out infinite alternate-reverse; }
+.orb.c { background: #2dd4bf; bottom: -45vmax; left: 20vw; opacity: .12; animation: drift 40s ease-in-out infinite alternate; }
+@keyframes drift { to { transform: translate(8vmax, 6vmax) scale(1.1); } }
+.grain {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: .06;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+@media (prefers-reduced-motion: reduce) { .orb { animation: none; } }
+
+main { position: relative; z-index: 1; max-width: 1080px; margin: 0 auto; padding: 48px 20px 80px; }
+
+/* github corner */
+.gh { position: fixed; top: 16px; right: 16px; z-index: 2; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: var(--muted); background: var(--panel); border: 1px solid var(--line); backdrop-filter: blur(8px); transition: color .15s, border-color .15s, background .15s; }
+.gh:hover, .gh:focus-visible { color: var(--text); border-color: var(--line-strong); background: var(--panel-strong); }
+.gh svg { width: 20px; height: 20px; }
+
+/* header */
+header { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 14px; margin-bottom: 40px; }
+.brand { display: inline-flex; align-items: center; gap: 12px; color: var(--muted); font: 500 13px var(--mono); letter-spacing: .08em; text-transform: lowercase; text-decoration: none; }
+.brand svg { width: 34px; height: 22px; }
+h1 { font: 400 clamp(44px, 8vw, 84px)/0.95 var(--serif); margin: 0; letter-spacing: -.02em; }
+h1 em {
+  font-style: italic;
+  background: linear-gradient(100deg, var(--a), var(--b) 70%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.lede { color: var(--muted); max-width: 560px; margin: 0; font-size: 16px; }
+
+/* inputs */
+.inputs { display: grid; grid-template-columns: 1fr auto 1fr; gap: 14px; align-items: stretch; }
+.field {
+  position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  transition: border-color .2s, box-shadow .2s;
+}
+.field:focus-within { border-color: color-mix(in srgb, var(--accent) 60%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent), 0 20px 60px -20px color-mix(in srgb, var(--accent) 40%, transparent); }
+.field.a { --accent: var(--a); }
+.field.b { --accent: var(--b); }
+.field-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px 0; }
+.tag { display: inline-flex; align-items: center; gap: 8px; font: 500 12px var(--mono); color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+.tag i { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+.count { font: 12px var(--mono); color: var(--faint); }
+.count.over { color: var(--bad); }
+textarea {
+  display: block; width: 100%; min-height: 150px; resize: vertical; border: 0; outline: 0; background: transparent;
+  color: var(--text); font: 17px/1.5 var(--sans); padding: 10px 16px 16px;
+}
+textarea::placeholder { color: var(--faint); }
+.swap {
+  align-self: center; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line-strong);
+  background: var(--panel-strong); color: var(--text); cursor: pointer; display: grid; place-items: center;
+  transition: transform .35s cubic-bezier(.5,1.6,.4,1), background .2s;
+}
+.swap:hover { background: rgba(255,255,255,.12); transform: rotate(180deg); }
+.swap svg { width: 18px; height: 18px; }
+
+.toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin: 16px 0 28px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.chips span { color: var(--faint); font-size: 13px; margin-right: 2px; }
+.chip {
+  border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 999px;
+  padding: 5px 12px; font: 13px var(--sans); cursor: pointer; transition: all .15s;
+}
+.chip:hover { color: var(--text); border-color: var(--line-strong); background: var(--panel); }
+.toggle { display: inline-flex; align-items: center; gap: 10px; color: var(--muted); font-size: 14px; cursor: pointer; user-select: none; }
+.toggle input { position: absolute; opacity: 0; pointer-events: none; }
+.toggle .track { width: 36px; height: 20px; border-radius: 99px; background: var(--panel-strong); border: 1px solid var(--line-strong); position: relative; transition: background .2s; }
+.toggle .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--muted); transition: transform .2s, background .2s; }
+.toggle input:checked + .track { background: color-mix(in srgb, var(--a) 45%, transparent); }
+.toggle input:checked + .track::after { transform: translateX(16px); background: #fff; }
+.toggle input:focus-visible + .track { outline: 2px solid var(--a); outline-offset: 2px; }
+
+/* summary */
+.summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
+.stat { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); min-width: 0; }
+.stat .k { font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.stat .v { font: 400 30px/1.2 var(--serif); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat .s { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* table */
+.table-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  text-align: left; font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--faint);
+  padding: 14px 20px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.02);
+}
+th.num, td.time { text-align: right; }
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover { color: var(--text); }
+th .arrow { opacity: .5; margin-left: 4px; }
+th .unit { text-transform: none; }
+tbody tr.row td { padding: 12px 20px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+tbody tr.row:last-child td { border-bottom: 0; }
+tbody tr.row { transition: background .15s; }
+tbody tr.row:hover { background: rgba(255,255,255,.03); }
+.name { font-weight: 500; }
+.detail, .note { font-size: 12px; color: var(--faint); margin-top: 2px; overflow-wrap: anywhere; }
+td.type { font-size: 13px; color: var(--muted); white-space: nowrap; }
+td.result { width: 42%; }
+.res { display: flex; align-items: center; gap: 14px; }
+.val { font: 500 14px var(--mono); min-width: 64px; white-space: pre; }
+.bar { flex: 1; height: 6px; border-radius: 6px; background: rgba(255,255,255,.06); overflow: hidden; min-width: 40px; }
+.bar > i { display: block; height: 100%; border-radius: inherit; width: 0; background: var(--c); box-shadow: 0 0 12px var(--c); transition: width .5s cubic-bezier(.2,.8,.2,1), background .3s; }
+.badge { font: 500 11px var(--mono); padding: 3px 8px; border-radius: 99px; letter-spacing: .04em; white-space: nowrap; }
+.badge.yes { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
+.badge.no { color: var(--bad); background: color-mix(in srgb, var(--bad) 14%, transparent); }
+.codes { font: 13px var(--mono); color: var(--muted); flex: 1; overflow-wrap: anywhere; white-space: normal; }
+.codes b { font-weight: 500; color: var(--a); }
+.codes b + b { color: var(--b); }
+td.time { width: 150px; font: 13px var(--mono); color: var(--muted); white-space: nowrap; }
+.tbar { height: 3px; margin-top: 6px; margin-left: auto; width: 100%; background: rgba(255,255,255,.05); border-radius: 3px; overflow: hidden; }
+.tbar > i { display: block; height: 100%; margin-left: auto; background: var(--c); transition: width .5s, background .3s; }
+.runs { color: var(--faint); font-size: 11px; }
+.loading .val { color: var(--faint); font-family: var(--sans); font-weight: 400; }
+.spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line-strong); border-top-color: var(--a); animation: spin .8s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.err .val { color: var(--bad); font-family: var(--sans); }
+.empty { padding: 40px 20px; text-align: center; color: var(--faint); }
+
+footer { margin-top: 40px; text-align: center; color: var(--faint); font-size: 13px; }
+footer a { color: var(--muted); }
+
+@media (max-width: 760px) {
+  main { padding: 32px 16px 60px; }
+  .inputs { grid-template-columns: 1fr; }
+  .swap { transform: rotate(90deg); }
+  .swap:hover { transform: rotate(270deg); }
+  .summary { grid-template-columns: repeat(2, 1fr); }
+  thead th, tbody tr.row td { padding-left: 12px; padding-right: 12px; }
+  td.type { white-space: normal; }
+  td.result { width: auto; }
+  td.time { width: 88px; }
+  .res { flex-wrap: wrap; gap: 6px 10px; }
+  .bar { flex-basis: 100%; }
+}
+</style>
+</head>
+<body>
+<div class="orbs" aria-hidden="true"><div class="orb a"></div><div class="orb b"></div><div class="orb c"></div></div>
+<div class="grain" aria-hidden="true"></div>
+<a class="gh" href="https://github.com/ryn-cx/similaritything" aria-label="View source on GitHub" title="View source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
+
+<main>
+  <header>
+    <a class="brand" href="/">
+      <svg viewBox="0 0 34 22" aria-hidden="true"><circle cx="11" cy="11" r="9.5" fill="none" stroke="#7c8cff" stroke-width="2"/><circle cx="23" cy="11" r="9.5" fill="none" stroke="#ff7ac6" stroke-width="2"/></svg>
+      similaritything.com
+    </a>
+    <h1>How <em>alike</em> are they?</h1>
+    <p class="lede">Compare two pieces of text using every commonly used text similarity algorithm.</p>
+  </header>
+
+  <section class="inputs">
+    <label class="field a">
+      <div class="field-head"><span class="tag"><i></i>Text A</span><span class="count" id="countA">0</span></div>
+      <textarea id="a" spellcheck="false" placeholder="kitten" autofocus></textarea>
+    </label>
+    <button class="swap" id="swap" type="button" title="Swap A and B" aria-label="Swap A and B">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4 3 8l4 4"/><path d="M3 8h14"/><path d="m17 20 4-4-4-4"/><path d="M21 16H7"/></svg>
+    </button>
+    <label class="field b">
+      <div class="field-head"><span class="tag"><i></i>Text B</span><span class="count" id="countB">0</span></div>
+      <textarea id="b" spellcheck="false" placeholder="sitting"></textarea>
+    </label>
+  </section>
+
+  <div class="toolbar">
+    <div class="chips" id="examples"><span>Try</span></div>
+    <label class="toggle"><input type="checkbox" id="ignoreCase"><span class="track"></span>Ignore case</label>
+  </div>
+
+  <section class="summary" aria-live="polite">
+    <div class="stat"><div class="k">Mean similarity</div><div class="v" id="sMean">—</div><div class="s" id="sMeanSub">across scored algorithms</div></div>
+    <div class="stat"><div class="k">Most alike says</div><div class="v" id="sTop">—</div><div class="s" id="sTopSub">&nbsp;</div></div>
+    <div class="stat"><div class="k">Fastest</div><div class="v" id="sFast">—</div><div class="s" id="sFastSub">&nbsp;</div></div>
+    <div class="stat"><div class="k">Slowest</div><div class="v" id="sSlow">—</div><div class="s" id="sSlowSub">&nbsp;</div></div>
+  </section>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th class="sortable" data-sort="type">Type<span class="arrow"></span></th>
+          <th class="sortable" data-sort="name">Comparison<span class="arrow"></span></th>
+          <th class="sortable" data-sort="score">Result<span class="arrow"></span></th>
+          <th class="num sortable" data-sort="time">Time <span class="unit">(µs)</span><span class="arrow"></span></th>
+        </tr>
+      </thead>
+      <tbody id="rows"><tr><td colspan="4" class="empty">Start typing to compare…</td></tr></tbody>
+    </table>
+  </div>
+
+  <footer>
+    Distances are counted in Unicode characters; the bar shows a normalised 0–1 similarity.
+    Times are the mean of repeated runs on the server.
+    Embeddings by <a href="https://github.com/trengrj/go-potion" rel="noopener">go-potion</a> and <a href="https://huggingface.co/sentence-transformers/static-similarity-mrl-multilingual-v1" rel="noopener">static-similarity-mrl-multilingual-v1</a>.
+  </footer>
+</main>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const a = $("a"), b = $("b"), ignoreCase = $("ignoreCase"), rows = $("rows");
+  let maxLen = 2000, seq = 0, last = null, sort = { key: null, dir: 1 }, pollTimer = null;
+
+  const examples = [
+    ["kitten", "sitting"],
+    ["Robert", "Rupert"],
+    ["Müller", "Mueller"],
+    ["MARTHA", "MARHTA"],
+    ["The quick brown fox jumps over the lazy dog", "A fast brown fox leaps over a sleepy dog"],
+    ["I love this movie", "I hate this film"],
+    ["func main() {}", "def main(): pass"],
+  ];
+  for (const [x, y] of examples) {
+    const btn = document.createElement("button");
+    btn.className = "chip"; btn.type = "button";
+    btn.textContent = x.length > 18 ? x.slice(0, 16) + "…" : `${x} / ${y}`;
+    btn.title = `${x}  ↔  ${y}`;
+    btn.onclick = () => { a.value = x; b.value = y; schedule(0); };
+    $("examples").appendChild(btn);
+  }
+
+  // Restore last inputs from the URL so comparisons are shareable.
+  const params = new URLSearchParams(location.search);
+  if (params.has("a") || params.has("b")) { a.value = params.get("a") || ""; b.value = params.get("b") || ""; }
+  else { a.value = "kitten"; b.value = "sitting"; }
+  ignoreCase.checked = params.get("i") === "1";
+
+  $("swap").onclick = () => { [a.value, b.value] = [b.value, a.value]; schedule(0); };
+  a.addEventListener("input", () => schedule());
+  b.addEventListener("input", () => schedule());
+  ignoreCase.addEventListener("change", () => schedule(0));
+
+  document.querySelectorAll("th.sortable").forEach((th) => th.onclick = () => {
+    const key = th.dataset.sort;
+    const asc = key === "name" || key === "type";
+    if (sort.key !== key) sort = { key, dir: asc ? 1 : -1 };
+    else if (sort.dir === (asc ? 1 : -1)) sort.dir *= -1;
+    else sort = { key: null, dir: 1 };
+    document.querySelectorAll("th .arrow").forEach((s) => s.textContent = "");
+    if (sort.key) th.querySelector(".arrow").textContent = sort.dir > 0 ? "↑" : "↓";
+    if (last) render(last);
+  });
+
+  let debounce;
+  function schedule(delay = 220) {
+    updateCounts();
+    clearTimeout(debounce);
+    debounce = setTimeout(run, delay);
+  }
+
+  function updateCounts() {
+    for (const [el, c] of [[a, $("countA")], [b, $("countB")]]) {
+      const n = [...el.value].length;
+      c.textContent = n.toLocaleString() + (n > maxLen * 0.8 ? ` / ${maxLen.toLocaleString()}` : "");
+      c.classList.toggle("over", n > maxLen);
+    }
+  }
+
+  let inflight = null;
+  async function run() {
+    const id = ++seq;
+    inflight?.abort(); // stops the server working on stale embeddings
+    const ctrl = inflight = new AbortController();
+    const texts = { a: a.value, b: b.value };
+    const q = new URLSearchParams();
+    if (a.value) q.set("a", a.value);
+    if (b.value) q.set("b", b.value);
+    if (ignoreCase.checked) q.set("i", "1");
+    history.replaceState(null, "", q.toString() ? "?" + q : location.pathname);
+    try {
+      const res = await fetch("/api/compare", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...texts, ignoreCase: ignoreCase.checked }),
+        signal: ctrl.signal,
+      });
+      const data = await res.json();
+      if (id !== seq) return;
+      if (!res.ok) {
+        if (data.maxLen) { maxLen = data.maxLen; updateCounts(); }
+        rows.innerHTML = `<tr><td colspan="4" class="empty">${esc(data.error || "Something went wrong")}${data.maxLen ? ` — max ${data.maxLen.toLocaleString()} characters per box` : ""}</td></tr>`;
+        return;
+      }
+      last = data;
+      render(data);
+      watchModels(data.models);
+    } catch (e) {
+      if (id === seq) rows.innerHTML = `<tr><td colspan="4" class="empty">Can't reach the server.</td></tr>`;
+    }
+  }
+
+  // Re-run once background model downloads finish.
+  function watchModels(models) {
+    const loading = (models || []).some((m) => m.state === "loading");
+    if (!loading || pollTimer) return;
+    pollTimer = setInterval(async () => {
+      try {
+        const ms = await (await fetch("/api/models")).json();
+        const readyNow = ms.filter((m) => m.state !== "loading").length;
+        const readyBefore = last.models.filter((m) => m.state !== "loading").length;
+        if (readyNow !== readyBefore) run();
+        if (!ms.some((m) => m.state === "loading")) { clearInterval(pollTimer); pollTimer = null; }
+      } catch {}
+    }, 2500);
+  }
+
+  function render(data) {
+    const results = data.results;
+    const ok = results.filter((r) => r.status === "ok");
+    const scored = ok.filter((r) => r.score != null && r.match == null);
+
+    // summary
+    if (scored.length) {
+      const mean = scored.reduce((s, r) => s + r.score, 0) / scored.length;
+      $("sMean").textContent = (mean * 100).toFixed(1) + "%";
+      $("sMean").style.color = color(mean);
+      $("sMeanSub").textContent = `across ${scored.length} scored algorithms`;
+      const top = scored.reduce((m, r) => r.score > m.score ? r : m);
+      $("sTop").textContent = (top.score * 100).toFixed(1) + "%";
+      $("sTop").style.color = color(top.score);
+      $("sTopSub").textContent = top.name;
+    }
+    const timed = ok.filter((r) => r.nanos > 0);
+    if (timed.length) {
+      const fast = timed.reduce((m, r) => r.nanos < m.nanos ? r : m);
+      const slow = timed.reduce((m, r) => r.nanos > m.nanos ? r : m);
+      $("sFast").textContent = fmtTime(fast.nanos); $("sFastSub").textContent = fast.name;
+      $("sSlow").textContent = fmtTime(slow.nanos); $("sSlowSub").textContent = slow.name;
+    }
+
+    // table
+    const logMin = Math.log10(10), logMax = Math.log10(Math.max(1e5, ...timed.map((r) => r.nanos)));
+    const tpct = (n) => Math.max(2, ((Math.log10(Math.max(n, 10)) - logMin) / (logMax - logMin)) * 100);
+    // Speed rank on a log scale: 0 = fastest row, 1 = slowest.
+    const ns = timed.map((r) => Math.log10(r.nanos));
+    const nsMin = Math.min(...ns), nsMax = Math.max(...ns);
+    const trank = (n) => nsMax > nsMin ? (Math.log10(n) - nsMin) / (nsMax - nsMin) : 0;
+
+    let list = results.slice();
+    if (sort.key) {
+      const val = { name: (r) => r.name.toLowerCase(), type: (r) => r.group.toLowerCase(), score: (r) => r.score ?? -1, time: (r) => r.nanos || Infinity }[sort.key];
+      list.sort((x, y) => (val(x) > val(y) ? 1 : val(x) < val(y) ? -1 : 0) * sort.dir);
+    }
+
+    let html = "";
+    for (const r of list) {
+      const busy = r.status === "loading";
+      const cls = busy ? "loading" : r.status === "error" ? "err" : "";
+      let result;
+      if (busy) {
+        result = `<div class="res"><span class="spinner"></span><span class="val">${esc(r.value)}</span></div>`;
+      } else if (r.status === "error") {
+        result = `<div class="res"><span class="val">${esc(r.value)}</span></div>`;
+      } else if (r.match != null) {
+        const [ca, cb] = r.value.split("  ·  ");
+        result = `<div class="res"><span class="codes"><b>${esc(ca)}</b> · <b>${esc(cb)}</b></span>
+          <span class="badge ${r.match ? "yes" : "no"}">${r.match ? "MATCH" : "DIFFERENT"}</span></div>`;
+      } else if (r.score == null) {
+        result = `<div class="res"><span class="val">${esc(r.value)}</span></div>`;
+      } else {
+        const s = r.score;
+        result = `<div class="res"><span class="val">${esc(r.value)}</span>
+          <span class="bar"><i style="--c:${color(s)};width:${(s * 100).toFixed(1)}%"></i></span></div>`;
+      }
+      const tc = r.nanos && timeColor(trank(r.nanos));
+      const time = r.nanos
+        ? `<span style="color:${tc}">${fmtTime(r.nanos)}</span><div class="tbar"><i style="--c:${tc};width:${tpct(r.nanos)}%"></i></div>`
+        : `<span class="runs">—</span>`;
+      const detail = r.detail ? `<div class="detail">${esc(r.detail)}</div>` : "";
+      if (r.note) result += `<div class="note">${esc(r.note)}</div>`;
+      html += `<tr class="row ${cls}"><td class="type">${esc(r.group)}</td>
+        <td><div class="name">${esc(r.name)}</div>${detail}</td><td class="result">${result}</td><td class="time" title="${r.runs ? `mean of ${r.runs.toLocaleString()} runs` : ""}">${time}</td></tr>`;
+    }
+    rows.innerHTML = html;
+  }
+
+  function color(s) {
+    // rose → amber → teal
+    const h = s < 0.5 ? 350 + (s / 0.5) * 50 : 40 + ((s - 0.5) / 0.5) * 130;
+    return `hsl(${h % 360} 85% 66%)`;
+  }
+  function timeColor(t) {
+    // green (fastest) → amber → red (slowest)
+    return `hsl(${140 * (1 - t)} 80% 62%)`;
+  }
+  // Always microseconds, so the column can be compared at a glance.
+  const usFormat = new Intl.NumberFormat("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  function fmtTime(ns) {
+    return `${usFormat.format(ns / 1e3)} µs`;
+  }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  schedule(0);
+})();
+</script>
+</body>
+</html>

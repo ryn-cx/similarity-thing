@@ -1,0 +1,101 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      port:
+        description: Host port to publish (overrides the DEPLOY_PORT variable)
+        required: false
+
+# Never run two deploys at once; a newer push supersedes a queued one.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  IMAGE: similaritything
+  CONTAINER: similaritything
+  # Host port: manual input > repo/environment variable DEPLOY_PORT > 8080.
+  PORT: ${{ inputs.port || vars.DEPLOY_PORT || '8080' }}
+  POTION_MODELS: ${{ vars.POTION_MODELS || 'all' }}
+  NETWORK: similaritything
+  TUNNEL_CONTAINER: similaritything-tunnel
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build --label "commit=${{ github.sha }}" -t "$IMAGE:latest" .
+
+      - name: Replace container
+        run: |
+          # Fail before touching the running app if another container or process holds the port.
+          others=$(docker ps --filter "publish=$PORT" --format '{{.Names}}' | grep -vx "$CONTAINER" || true)
+          if [ -n "$others" ]; then
+            echo "Port $PORT is already published by: $others. Set DEPLOY_PORT to a free port." >&2
+            exit 1
+          fi
+          if [ -z "$(docker ps -q --filter "name=^$CONTAINER\$" --filter "publish=$PORT")" ] \
+             && command -v ss >/dev/null && [ -n "$(ss -Hltn "sport = :$PORT")" ]; then
+            echo "Port $PORT is in use by a non-Docker process. Set DEPLOY_PORT to a free port." >&2
+            exit 1
+          fi
+
+          docker network inspect "$NETWORK" >/dev/null 2>&1 || docker network create "$NETWORK"
+          docker rm -f "$CONTAINER" 2>/dev/null || true
+          docker run -d \
+            --name "$CONTAINER" \
+            --network "$NETWORK" \
+            --restart unless-stopped \
+            -p "127.0.0.1:$PORT:8080" \
+            -e POTION_MODELS="$POTION_MODELS" \
+            -v potion-models:/models \
+            "$IMAGE:latest"
+
+      - name: Health check
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS "http://localhost:$PORT/healthz" >/dev/null; then
+              echo "Up on port $PORT"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Service did not respond on port $PORT" >&2
+          docker logs --tail 100 "$CONTAINER" >&2
+          exit 1
+
+      # Route the tunnel's public hostname to http://similaritything:8080 in the
+      # Cloudflare dashboard (Zero Trust → Networks → Tunnels → Public hostnames).
+      - name: Start Cloudflare tunnel
+        env:
+          TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+        run: |
+          if [ -z "$TUNNEL_TOKEN" ]; then
+            echo "CLOUDFLARE_TUNNEL_TOKEN secret not set; skipping tunnel"
+            exit 0
+          fi
+          # Only recreate the tunnel when the token changes, so deploys don't drop it.
+          hash=$(printf %s "$TUNNEL_TOKEN" | sha256sum | cut -c1-16)
+          current=$(docker inspect -f '{{ index .Config.Labels "token-hash" }}' "$TUNNEL_CONTAINER" 2>/dev/null || true)
+          running=$(docker inspect -f '{{ .State.Running }}' "$TUNNEL_CONTAINER" 2>/dev/null || true)
+          if [ "$current" = "$hash" ] && [ "$running" = "true" ]; then
+            echo "Tunnel already running with current token"
+            exit 0
+          fi
+          docker rm -f "$TUNNEL_CONTAINER" 2>/dev/null || true
+          docker run -d \
+            --name "$TUNNEL_CONTAINER" \
+            --network "$NETWORK" \
+            --restart unless-stopped \
+            --label "token-hash=$hash" \
+            -e TUNNEL_TOKEN \
+            cloudflare/cloudflared:latest tunnel --no-autoupdate run
+
+      - name: Prune old images
+        run: docker image prune -f  # drops the previous, now-untagged build
